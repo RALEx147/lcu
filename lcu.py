@@ -5,23 +5,22 @@ from lcu_driver import Connector
 from aram_mmr import display_mmr
  
 conn = Connector()
+subprocess.call(["C:\Program Files\AutoHotkey\AutoHotkey.exe", "C:\\Users\\rale\\Documents\\Programming\\murderbridge.ahk"])
 
 @conn.ws.register('/lol-champ-select/v1/session', event_types=('CREATE',))
 async def connect(conn, event):
     champ_select = event.data
     await display_mmr(champ_select, conn)
-    subprocess.call(["C:\Program Files\AutoHotkey\AutoHotkey.exe", "C:\\Users\\rale\\Documents\\Programming\\murderbridge.ahk"])
+
 
 
 #-----------------------------------------------------------------------------------------------------------------------
 """Accept Queue"""
 
 async def accept(c):
-    end_time = time.time() + 12
-    # while time.time() < end_time: 
     if keyboard.read_key(): 
         await c.request('POST', '/lol-matchmaking/v1/ready-check/accept') 
-        # break
+
 
 @conn.ws.register('/lol-matchmaking/v1/ready-check')
 async def ready(connection, event):
