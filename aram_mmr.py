@@ -5,8 +5,13 @@ import win32api
 from bs4 import BeautifulSoup
 from fuzzywuzzy import process
 
-#-----------------------------------------------------------------------------------------------------------------------
-"""Aram MMR Preview"""
+"""
+    Get MMR for one Summoner usng whatismymmr
+
+    @param name: Summoner name string
+    @return: MMR int, MMR std int, name string
+    @raise None: No aram value for this summoner
+""" 
 def get_mmr(name):
     r = requests.get('https://na.whatismymmr.com/api/v1/summoner?name=' + name)
     r = r.json()
@@ -17,6 +22,11 @@ def get_mmr(name):
         print("NO VALUE FOR", name)
 
 
+"""
+    Get Aram Leaderboard from aram.moe
+
+    @return: Dirty Doughnut: ("16", "3492 ± 0")
+"""
 def get_ranks():
     output = {}
     page = requests.get("https://aram.moe/")
@@ -30,6 +40,18 @@ def get_ranks():
     return output
 
 
+"""
+    Display ARAM MMR using LCU Driver
+    Fuzzy search for ranking due to aram.moe name consistency issues.
+    Use whatismymmr mmr values, aram.moe only updates daily.
+
+    @param champ_select: REST API response from champ_select call using LCU Driver
+    @param conn: Connector of LCU Driver
+    @return: None, Displays ex.     3 players: 2381 ± 42
+                                014 Dirty Doughnut: 3480 ± 10
+                                047 Fennriss: 3425 ± 11
+                                XXX derroz: 1550 ± 92
+""" 
 async def display_mmr(champ_select, conn):
     
     ids = [i["summonerId"] for i in champ_select["myTeam"] if i != 0]
@@ -49,6 +71,7 @@ async def display_mmr(champ_select, conn):
     count = len(result)
     
     if count == 0:
+        win32api.MessageBox(0, "", "BUNCH OF SHITTERS", 0x00001000) 
         return
 
     mmr = sum([i[0] for i in result]) / count
