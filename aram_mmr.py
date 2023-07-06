@@ -1,9 +1,25 @@
+import asyncio
 import re
 from concurrent.futures import ThreadPoolExecutor
+import time
 import requests
 import win32api
 from bs4 import BeautifulSoup
 from fuzzywuzzy import process
+
+class MMR():
+    def __init__(self, mmr, err, name, id) -> None:
+        self.mmr = mmr
+        self.err = err
+        self.name = name
+        self.id = id
+
+    def set_rank(self, rank):
+        self.rank = rank
+
+    def set_time(self, time):
+        self.time = time
+
 
 """
     Get MMR for one Summoner usng whatismymmr
@@ -12,12 +28,14 @@ from fuzzywuzzy import process
     @return: MMR int, MMR std int, name string
     @raise None: No aram value for this summoner
 """ 
-def get_mmr(name):
+def get_mmr(name) -> MMR:
+    name = name[0]
+    id = name[1]
     r = requests.get('https://na.whatismymmr.com/api/v1/summoner?name=' + name)
     r = r.json()
     try:
         if r["ARAM"]["avg"]:
-            return r["ARAM"]["avg"], r["ARAM"]["err"], name
+            return MMR(r["ARAM"]["avg"], r["ARAM"]["err"], name, id)
     except:
         print("NO VALUE FOR", name)
 
@@ -28,6 +46,7 @@ def get_mmr(name):
     @return: Dirty Doughnut: ("16", "3492 ± 0")
 """
 def get_ranks():
+    
     output = {}
     page = requests.get("https://aram.moe/")
     soup = BeautifulSoup(page.content, "html.parser")
@@ -39,6 +58,11 @@ def get_ranks():
             output[m.group(2)] = (m.group(1), m.group(3))
     return output
 
+
+async def get_name(id):
+    name = await conn.request('get', '/lol-summoner/v1/summoners/' + str(id))
+    name = await name.json()
+    return name["displayName"], id
 
 """
     Display ARAM MMR using LCU Driver
@@ -52,18 +76,19 @@ def get_ranks():
                                 047 Fennriss: 3425 ± 11
                                 XXX derroz: 1550 ± 92
 """ 
-async def display_mmr(champ_select, conn):
-    
+async def display_mmr(champ_select, connection):
+    global conn
+    conn = connection
+
+    timestamp = time.time()
+
     ids = [i["summonerId"] for i in champ_select["myTeam"] if i != 0]
 
     names = []
-    for i in ids:
-        name = await conn.request('get', '/lol-summoner/v1/summoners/' + str(i))
-        name = await name.json()
-        names.append(name["displayName"])
-
-    result = []
+    result = [] 
     with ThreadPoolExecutor(max_workers=5) as pool:
+        names = list(pool.map(get_name, ids))
+        names = await asyncio.gather(*names)
         result = list(pool.map(get_mmr, names))
 
 
@@ -71,7 +96,7 @@ async def display_mmr(champ_select, conn):
     count = len(result)
     
     if count == 0:
-        win32api.MessageBox(0, "", "BUNCH OF SHITTERS", 0x00001000) 
+        win32api.MessageBox(0, "Sht\nCnt\nBad\nPlayers", "BUNCH OF SHITTERS", 0x00001000) 
         return
 
     mmr = sum([i[0] for i in result]) / count
@@ -87,15 +112,19 @@ async def display_mmr(champ_select, conn):
         mmr, err, name = res
         ranking = "XXX"
         if name in top500:
-            ranking = f'{int(top500[name][0]):03d}'
+            rank_value = int(top500[name][0])
+            ranking = f'{rank_value:03d}'
         else:
-            fuzzy_name = process.extractOne(name, top500.keys())
+            fuzzy_name = process.extractOne(name, top500.keys(), score_cutoff=90)
             if mmr >= lowest500 and fuzzy_name in top500:
                 print("fuzzy", fuzzy_name, mmr, ">", lowest500)
-                ranking = f'{int(top500[name][0]):03d}'
-        
+                rank_value = int(top500[fuzzy_name][0])
+                ranking = f'~{rank_value:03d}'
+
+        res.set_rank(rank_value)
+        res.set_time(timestamp)
         ranks.append([ranking, name, mmr, err])
-    
+     
     output = ""
     for i in sorted(ranks, key=lambda x: x[2], reverse=True):
         output += f'#{i[0]} {i[1]}: {i[2]} ± {i[3]}\n'
