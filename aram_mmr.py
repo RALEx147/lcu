@@ -1,11 +1,20 @@
 import asyncio
 import re
+import dill
 from concurrent.futures import ThreadPoolExecutor
+
+from itertools import repeat
+
 import time
 import requests
 import win32api
 from bs4 import BeautifulSoup
 from fuzzywuzzy import process
+from riotwatcher import LolWatcher, ApiError
+from league import credential
+
+watcher = LolWatcher(credential.get_key())
+
 
 class MMR():
     def __init__(self, mmr, err, name, id) -> None:
@@ -41,6 +50,22 @@ def get_mmr(name) -> MMR:
 
 
 """
+    Get MMR for one Summoner usng whatismymmr
+
+    @param name: Summoner name string
+    @return: MMR int, MMR std int, name string
+    @raise None: No aram value for this summoner
+""" 
+def get_high_mmr_players(args):
+    id, mmrf, namesf = args
+
+    mmr = mmrf[id]
+    names = namesf[id]
+    if mmr or names:
+        return mmr, names
+    
+
+"""
     Get Aram Leaderboard from aram.moe
 
     @return: Dirty Doughnut: ("16", "3492 ± 0")
@@ -61,7 +86,11 @@ def get_ranks(content):
 async def get_name(id):
     name = await conn.request('get', '/lol-summoner/v1/summoners/' + str(id))
     name = await name.json()
-    return name["displayName"], id
+    return name['displayName']
+
+async def get_puuid(name):
+    return watcher.summoner.by_name('na1', name)['puuid']
+
 
 """
     Display ARAM MMR using LCU Driver
@@ -94,7 +123,7 @@ async def display_mmr(champ_select, connection):
     result = [i for i in result if i]
     count = len(result)
     
-    if count == 0:
+    if count == 1:
         win32api.MessageBox(0, "Sht\nCnt\nBad\nPlayers", "BUNCH OF SHITTERS", 0x00001000) 
         return
 
@@ -131,4 +160,53 @@ async def display_mmr(champ_select, connection):
     
     win32api.MessageBox(0, output, avg, 0x00001000) 
 
+"""
+    Display ARAM Historically High MMR Players using LCU Driver
+    Using Precalculated high mmr players in moe/t.py
 
+    @param champ_select: REST API response from champ_select call using LCU Driver
+    @param conn: Connector of LCU Driver
+    @return: None, Displays ex.     3 players: 3038 ± 0
+                                    Dirty Doughnut: 3480
+                                       Fennriss: 3425
+                                       Fenix MG: 3XXX
+""" 
+async def display_high_mmr(champ_select, connection):
+    global conn
+    conn = connection
+
+    ids = [i["summonerId"] for i in champ_select["myTeam"] if i != 0]
+
+    result = [] 
+    with ThreadPoolExecutor(max_workers=5) as pool:
+
+        names = list(pool.map(get_name, ids))
+
+        with open("league\cache\ids_to_mmr.pickle", "rb") as mmrf,\
+             open("league\cache\ids_to_names.pickle", "rb") as namesf:
+            mmrd = dill.load(mmrf, "rb")
+            namesd = dill.load(namesf, "rb")
+            names = await asyncio.gather(*names)
+            puuid = list(pool.map(get_puuid, names))
+            puuid = await asyncio.gather(*puuid)
+
+            args = zip(puuid, repeat(mmrd), repeat(namesd))
+            result = list(pool.map(get_high_mmr_players, args))
+
+
+    result = [i for i in result if i]
+    count = len(result)
+    
+    if count == 0:
+        win32api.MessageBox(0, "Sht\nCnt\nBad\nPlayers", "BUNCH OF SHITTERS", 0x00001000) 
+        return
+
+    mmr = sum([int(i[0]) if i[0] != '3XXX' else 3000 for i in result]) / count
+    avg = f"{count} players: {round(mmr)} ± 0"
+
+    output = ""
+    for res in result:
+        mmr, name = res
+        output += f'{name}: {mmr}\n'
+
+    win32api.MessageBox(0, output, avg, 0x00001000)
