@@ -45,11 +45,10 @@ def get_mmr(name) -> MMR:
 
     @return: Dirty Doughnut: ("16", "3492 ± 0")
 """
-def get_ranks():
+def get_ranks(content):
     
     output = {}
-    page = requests.get("https://aram.moe/")
-    soup = BeautifulSoup(page.content, "html.parser")
+    soup = BeautifulSoup(content, "html.parser")
     results = soup.find_all(class_="player-container")
     for i in results:
         p = re.compile(r'<div class="player-container"><span class="num">(.+)</span><span class="name">(.+)</span><span class="mmr">(.+)</span></div>')
@@ -105,7 +104,8 @@ async def display_mmr(champ_select, connection):
     avg = f"{count} players: {round(mmr)} ±{round(err)}"
 
     ranks = []
-    top500 = get_ranks()
+    page_request = requests.get("https://aram.moe/")
+    top500 = get_ranks(page_request.content)
 
     lowest500 = min([int(i[0]) for i in top500.values()])
     for res in result:
