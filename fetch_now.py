@@ -1,6 +1,7 @@
 import webbrowser
 from lcu_driver import Connector
-from aram_mmr import display_mmr
+from aram_mmr import display_mmr, display_high_mmr
+import asyncio
 
 conn = Connector()
 
@@ -13,10 +14,11 @@ async def display_mmr_now(conn):
     if 'httpStatus' in champ_select and champ_select['httpStatus'] == 404:
         return
         
-    await display_mmr(champ_select, conn)
+    await display_high_mmr(champ_select, conn)
+    quit()
 
 
-
+    
 @conn.close
 async def disconnect(_):
     await conn.stop() 

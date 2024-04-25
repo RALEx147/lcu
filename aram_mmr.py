@@ -1,3 +1,4 @@
+import aiohttp
 import asyncio
 import re
 import dill
@@ -10,11 +11,11 @@ import requests
 import win32api
 from bs4 import BeautifulSoup
 from fuzzywuzzy import process
-from riotwatcher import LolWatcher, ApiError
+from riotwatcher import LolWatcher, RiotWatcher, ApiError
 from league import credential
 
 watcher = LolWatcher(credential.get_key())
-
+riot = RiotWatcher(credential.get_key())
 
 class MMR():
     def __init__(self, mmr, err, name, id) -> None:
@@ -59,8 +60,8 @@ def get_mmr(name) -> MMR:
 def get_high_mmr_players(args):
     id, mmrf, namesf = args
 
-    mmr = mmrf[id]
-    names = namesf[id]
+    mmr = mmrf.get(id)
+    names = namesf.get(id)
     if mmr or names:
         return mmr, names
     
@@ -83,14 +84,28 @@ def get_ranks(content):
     return output
 
 
-async def get_name(id):
+
+async def get(args):
+    print("in")
+    print(time.time())
+    id, mmrf, namesf = args
     name = await conn.request('get', '/lol-summoner/v1/summoners/' + str(id))
     name = await name.json()
-    return name['displayName']
+    puuid = riot.account.by_riot_id('americas', name['gameName'], name['tagLine'])['puuid']
 
-async def get_puuid(name):
-    return watcher.summoner.by_name('na1', name)['puuid']
+    mmr = mmrf.get(puuid)
+    names = namesf.get(puuid)
+    print("out")
+    print(time.time())
+    if mmr or names:
+        return mmr, names
 
+
+def load_pickles(file_type):
+    path = f"league/cache/ids_to_{file_type}.pickle"
+    with open(path, "rb") as file:
+        pickle = dill.load(file)
+    return pickle
 
 """
     Display ARAM MMR using LCU Driver
@@ -174,30 +189,20 @@ async def display_mmr(champ_select, connection):
 async def display_high_mmr(champ_select, connection):
     global conn
     conn = connection
-
-    ids = [i["summonerId"] for i in champ_select["myTeam"] if i != 0]
+    mmrd, namesd = load_pickles("mmr"), load_pickles("names")
 
     result = [] 
+    ids = [i["summonerId"] for i in champ_select["myTeam"] if i != 0]
+    
     with ThreadPoolExecutor(max_workers=5) as pool:
-
-        names = list(pool.map(get_name, ids))
-
-        with open("league\cache\ids_to_mmr.pickle", "rb") as mmrf,\
-             open("league\cache\ids_to_names.pickle", "rb") as namesf:
-            mmrd = dill.load(mmrf, "rb")
-            namesd = dill.load(namesf, "rb")
-            names = await asyncio.gather(*names)
-            puuid = list(pool.map(get_puuid, names))
-            puuid = await asyncio.gather(*puuid)
-
-            args = zip(puuid, repeat(mmrd), repeat(namesd))
-            result = list(pool.map(get_high_mmr_players, args))
+        args = zip(ids, repeat(mmrd), repeat(namesd))
+        result = await asyncio.gather(*list(pool.map(get, args)))
 
 
     result = [i for i in result if i]
     count = len(result)
     
-    if count == 0:
+    if count == 1:
         win32api.MessageBox(0, "Sht\nCnt\nBad\nPlayers", "BUNCH OF SHITTERS", 0x00001000) 
         return
 

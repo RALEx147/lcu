@@ -2,7 +2,7 @@ import subprocess
 import time
 import keyboard
 from lcu_driver import Connector
-from aram_mmr import display_mmr
+from aram_mmr import display_mmr, display_high_mmr
  
 conn = Connector()
 subprocess.Popen(["C:\Program Files\AutoHotkey\AutoHotkey.exe", "C:\\Users\\rale\\Documents\\Programming\\murderbridge.ahk"])
@@ -10,7 +10,7 @@ subprocess.Popen(["C:\Program Files\AutoHotkey\AutoHotkey.exe", "C:\\Users\\rale
 @conn.ws.register('/lol-champ-select/v1/session', event_types=('CREATE',))
 async def connect(conn, event):
     champ_select = event.data
-    await display_mmr(champ_select, conn)
+    await display_high_mmr(champ_select, conn)
 
 
 #-----------------------------------------------------------------------------------------------------------------------
